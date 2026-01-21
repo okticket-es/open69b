@@ -38,6 +38,7 @@
     "prettier": "^3.7.4",
     "rimraf": "^6.1.2",
     "serverless": "^4.30.0",
+    "serverless-domain-manager": "^8.0.0",
     "serverless-offline": "^14.4.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^7.18.0"

@@ -47,17 +47,17 @@ class Sat69bApiHandler extends BaseHandler {
     const path = httpEvent.rawPath;
     const method = httpEvent.requestContext?.http?.method;
 
-    // GET /sat69b/status/{rfc}
+    // GET /status/{rfc}
     if (path.includes("/status/") && method === "GET") {
       return this.wrapHandler(statusHandler, httpEvent, context, callback);
     }
 
-    // GET /sat69b/metadata
+    // GET /metadata
     if (path.includes("/metadata") && method === "GET") {
       return this.wrapHandler(metadataHandler, httpEvent, context, callback);
     }
 
-    // POST /sat69b/sync
+    // POST /sync
     if (path.includes("/sync") && method === "POST") {
       return this.wrapHandler(syncHandler, httpEvent, context, callback);
     }
