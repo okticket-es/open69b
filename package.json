@@ -1,0 +1,48 @@
+{
+  "name": "open69b",
+  "author": "Juan Mier",
+  "version": "1.0.0",
+  "description": "Fast lookup service for Mexico's SAT 69-B list",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "pnpm rimraf dist",
+    "clean-all": "pnpm rimraf .husky coverage dist node_modules .serverless",
+    "offline": "sls offline start",
+    "deploy": "sls deploy --stage prod",
+    "format": "prettier --write \"src/**/*.{ts,js}\"",
+    "lint": "ESLINT_USE_FLAT_CONFIG=true eslint --config eslint.config.js \"src/**/*.{ts,js}\" --fix",
+    "lint:check": "ESLINT_USE_FLAT_CONFIG=true eslint --config eslint.config.js \"src/**/*.{ts,js}\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@miermontoto/config": "^1.2.1",
+    "@miermontoto/lambda-handler": "^1.1.0",
+    "@miermontoto/lambda-responses": "^1.0.1",
+    "@miermontoto/s3": "^1.2.2",
+    "aws-lambda": "^1.0.7",
+    "csv-parse": "^5.5.0",
+    "dotenv": "^16.6.1",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/aws-lambda": "^8.10.159",
+    "@types/node": "^22.19.3",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-prettier": "^5.5.4",
+    "globals": "^15.15.0",
+    "prettier": "^3.7.4",
+    "rimraf": "^6.1.2",
+    "serverless": "^4.30.0",
+    "serverless-offline": "^14.4.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^7.18.0"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": []
+  }
+}

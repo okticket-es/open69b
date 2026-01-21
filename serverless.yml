@@ -1,0 +1,313 @@
+service: 'open69b'
+frameworkVersion: '4'
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  architecture: arm64
+  stage: ${opt:stage, 'prod'}
+  region: eu-west-1
+  memorySize: 512
+  timeout: 300
+  httpApi:
+    cors: true
+  environment:
+    APP_NAME: ${env:APP_NAME, 'open69b'}
+    APP_VERSION: ${env:APP_VERSION, '1.0.0'}
+    # para desarrollo local usa .env, en deploy usa ElastiCache
+    REDIS_HOST: ${env:REDIS_HOST, ''}
+    REDIS_PORT: ${env:REDIS_PORT, '6379'}
+    S3_BUCKET: ${self:custom.backupBucket}
+    S3_REGION: ${self:provider.region}
+    SAT_CSV_URL: ${env:SAT_CSV_URL, 'http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv'}
+  vpc:
+    securityGroupIds:
+      - Ref: LambdaSecurityGroup
+    subnetIds:
+      - Ref: PrivateSubnet1
+      - Ref: PrivateSubnet2
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::${self:custom.backupBucket}
+            - arn:aws:s3:::${self:custom.backupBucket}/*
+
+plugins:
+  - serverless-offline
+
+custom:
+  backupBucket: open69b-backups-${self:provider.stage}
+  serverless-offline:
+    httpPort: ${env:APP_PORT, '3000'}
+    lambdaPort: ${env:LAMBDA_PORT, '3002'}
+    host: 0.0.0.0
+    noPrependStageInUrl: true
+    useChildProcesses: true
+
+functions:
+  sat69b:
+    handler: src/sat69b/handlers/api.handler
+    events:
+      - httpApi:
+          path: /sat69b/status/{rfc}
+          method: GET
+      - httpApi:
+          path: /sat69b/metadata
+          method: GET
+      - httpApi:
+          path: /sat69b/sync
+          method: POST
+      - httpApi:
+          path: /sat69b/health
+          method: GET
+      - schedule:
+          name: sat69b-daily-sync
+          description: 'Sync SAT 69-B list daily at 3:00 AM UTC'
+          rate: cron(0 3 * * ? *)
+          enabled: true
+
+resources:
+  Resources:
+    # vpc
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: 10.0.0.0/16
+        EnableDnsHostnames: true
+        EnableDnsSupport: true
+        Tags:
+          - Key: Name
+            Value: ${self:service}-vpc
+
+    # internet gateway (para NAT)
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: ${self:service}-igw
+
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId:
+          Ref: VPC
+        InternetGatewayId:
+          Ref: InternetGateway
+
+    # subnet pública (para NAT Gateway)
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: VPC
+        CidrBlock: 10.0.0.0/24
+        AvailabilityZone: ${self:provider.region}a
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: ${self:service}-public-subnet
+
+    # subnets privadas (para Lambda y ElastiCache)
+    PrivateSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: VPC
+        CidrBlock: 10.0.1.0/24
+        AvailabilityZone: ${self:provider.region}a
+        Tags:
+          - Key: Name
+            Value: ${self:service}-private-subnet-1
+
+    PrivateSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId:
+          Ref: VPC
+        CidrBlock: 10.0.2.0/24
+        AvailabilityZone: ${self:provider.region}b
+        Tags:
+          - Key: Name
+            Value: ${self:service}-private-subnet-2
+
+    # elastic IP para NAT Gateway
+    NatEIP:
+      Type: AWS::EC2::EIP
+      DependsOn: VPCGatewayAttachment
+      Properties:
+        Domain: vpc
+        Tags:
+          - Key: Name
+            Value: ${self:service}-nat-eip
+
+    # NAT Gateway (permite a Lambda acceder a internet)
+    NatGateway:
+      Type: AWS::EC2::NatGateway
+      Properties:
+        AllocationId:
+          Fn::GetAtt: [NatEIP, AllocationId]
+        SubnetId:
+          Ref: PublicSubnet
+        Tags:
+          - Key: Name
+            Value: ${self:service}-nat
+
+    # route tables
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: VPC
+        Tags:
+          - Key: Name
+            Value: ${self:service}-public-rt
+
+    PublicRoute:
+      Type: AWS::EC2::Route
+      DependsOn: VPCGatewayAttachment
+      Properties:
+        RouteTableId:
+          Ref: PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId:
+          Ref: InternetGateway
+
+    PublicSubnetRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PublicSubnet
+        RouteTableId:
+          Ref: PublicRouteTable
+
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: VPC
+        Tags:
+          - Key: Name
+            Value: ${self:service}-private-rt
+
+    PrivateRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId:
+          Ref: PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId:
+          Ref: NatGateway
+
+    PrivateSubnet1RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PrivateSubnet1
+        RouteTableId:
+          Ref: PrivateRouteTable
+
+    PrivateSubnet2RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PrivateSubnet2
+        RouteTableId:
+          Ref: PrivateRouteTable
+
+    # security groups
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Lambda functions
+        VpcId:
+          Ref: VPC
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: ${self:service}-lambda-sg
+
+    RedisSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Redis cluster
+        VpcId:
+          Ref: VPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 6379
+            ToPort: 6379
+            SourceSecurityGroupId:
+              Ref: LambdaSecurityGroup
+        Tags:
+          - Key: Name
+            Value: ${self:service}-redis-sg
+
+    # elasticache redis
+    RedisSubnetGroup:
+      Type: AWS::ElastiCache::SubnetGroup
+      Properties:
+        Description: Subnet group for Redis cluster
+        SubnetIds:
+          - Ref: PrivateSubnet1
+          - Ref: PrivateSubnet2
+
+    RedisCluster:
+      Type: AWS::ElastiCache::CacheCluster
+      Properties:
+        CacheNodeType: cache.t4g.micro
+        Engine: redis
+        EngineVersion: '7.1'
+        NumCacheNodes: 1
+        CacheSubnetGroupName:
+          Ref: RedisSubnetGroup
+        VpcSecurityGroupIds:
+          - Ref: RedisSecurityGroup
+        Tags:
+          - Key: Name
+            Value: ${self:service}-redis
+
+    # s3 bucket para backups
+    BackupBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      Properties:
+        BucketName: ${self:custom.backupBucket}
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldBackups
+              Status: Enabled
+              ExpirationInDays: 30
+
+  Outputs:
+    RedisEndpoint:
+      Description: Redis cluster endpoint
+      Value:
+        Fn::GetAtt: [RedisCluster, RedisEndpoint.Address]
+    VpcId:
+      Description: VPC ID
+      Value:
+        Ref: VPC
+
+package:
+  patterns:
+    - '!./**'
+    - 'src/**'
+
+build:
+  esbuild:
+    external:
+      - '@aws-sdk/client-s3'
+      - '@miermontoto/config'
+      - '@miermontoto/lambda-handler'
+      - '@miermontoto/lambda-responses'
+      - '@miermontoto/s3'
