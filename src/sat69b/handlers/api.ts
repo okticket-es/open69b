@@ -4,7 +4,7 @@
  */
 
 import { BaseHandler } from "@miermontoto/lambda-handler";
-import { notFound } from "@miermontoto/lambda-responses";
+import { notFound, unauthorized } from "@miermontoto/lambda-responses";
 import { handler as statusHandler } from "@sat69b/handlers/status";
 import { handler as metadataHandler } from "@sat69b/handlers/metadata";
 import { handler as syncHandler } from "@sat69b/handlers/sync";
@@ -17,6 +17,17 @@ import {
 } from "aws-lambda";
 
 type Sat69bEvent = APIGatewayProxyEventV2 | ScheduledEvent;
+
+const API_KEY = process.env.API_KEY || "";
+
+/**
+ * Valida el header x-api-key contra la API_KEY configurada.
+ */
+function isAuthorized(event: APIGatewayProxyEventV2): boolean {
+  if (!API_KEY) return true; // sin API_KEY configurada, acceso libre
+  const headerKey = event.headers?.["x-api-key"];
+  return headerKey === API_KEY;
+}
 
 /**
  * Detecta si es un scheduled event (para sync automático).
@@ -47,18 +58,20 @@ class Sat69bApiHandler extends BaseHandler {
     const path = httpEvent.rawPath;
     const method = httpEvent.requestContext?.http?.method;
 
-    // GET /status/{rfc}
+    // GET /status/{rfc} - protegido
     if (path.includes("/status/") && method === "GET") {
+      if (!isAuthorized(httpEvent)) return unauthorized();
       return this.wrapHandler(statusHandler, httpEvent, context, callback);
     }
 
-    // GET /metadata
+    // GET /metadata - público
     if (path.includes("/metadata") && method === "GET") {
       return this.wrapHandler(metadataHandler, httpEvent, context, callback);
     }
 
-    // POST /sync
+    // POST /sync - protegido
     if (path.includes("/sync") && method === "POST") {
+      if (!isAuthorized(httpEvent)) return unauthorized();
       return this.wrapHandler(syncHandler, httpEvent, context, callback);
     }
 
