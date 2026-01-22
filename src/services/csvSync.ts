@@ -3,7 +3,7 @@
  */
 
 import { parseCsv, calculateHash } from "@/utils/csvParser";
-import { Sat69bRecord, SyncMetadata, SyncResult } from "@/utils/types";
+import { Sat69bRecord, SyncMetadata, SyncResult, SyncStatus } from "@/utils/types";
 import {
   bulkSetRecords,
   clearAllRecords,
@@ -95,7 +95,7 @@ export async function syncFromSat(): Promise<SyncResult> {
         csvHash,
         csvSize,
         syncDuration: Date.now() - startTime,
-        status: "skipped",
+        status: SyncStatus.SKIPPED,
       };
       await setMetadata(metadata);
 
@@ -139,7 +139,7 @@ export async function syncFromSat(): Promise<SyncResult> {
       csvHash,
       csvSize,
       syncDuration: duration,
-      status: "success",
+      status: SyncStatus.SUCCESS,
     };
     await setMetadata(metadata);
 
@@ -164,7 +164,7 @@ export async function syncFromSat(): Promise<SyncResult> {
       csvHash: "",
       csvSize: 0,
       syncDuration: duration,
-      status: "failed",
+      status: SyncStatus.FAILED,
       errorMessage: error.message,
     };
     await setMetadata(metadata);

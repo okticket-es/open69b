@@ -6,6 +6,24 @@ import { parse } from "csv-parse/sync";
 import { Sat69bRecord, ProcessStep, Sat69bStatus, CSV_COLUMNS } from "./types";
 
 /**
+ * Mapa de strings del CSV a valores del enum Sat69bStatus.
+ */
+const STATUS_MAP: Record<string, Sat69bStatus> = {
+  Presunto: Sat69bStatus.PRESUNTO,
+  Definitivo: Sat69bStatus.DEFINITIVO,
+  Desvirtuado: Sat69bStatus.DESVIRTUADO,
+  "Sentencia Favorable": Sat69bStatus.SENTENCIA_FAVORABLE,
+};
+
+/**
+ * Convierte el string de situación del CSV al enum Sat69bStatus.
+ */
+function parseStatus(value: string | null): Sat69bStatus | null {
+  if (!value) return null;
+  return STATUS_MAP[value] ?? null;
+}
+
+/**
  * Número de filas de encabezado/info a saltar (el CSV tiene 2 filas iniciales de metadata).
  */
 const HEADER_ROWS_TO_SKIP = 2;
@@ -38,7 +56,7 @@ function parseRow(row: string[]): Sat69bRecord | null {
   const rfc = cleanValue(row[CSV_COLUMNS.RFC]);
   if (!rfc) return null;
 
-  const situacion = cleanValue(row[CSV_COLUMNS.SITUACION]) as Sat69bStatus;
+  const situacion = parseStatus(cleanValue(row[CSV_COLUMNS.SITUACION]));
 
   return {
     rfc,

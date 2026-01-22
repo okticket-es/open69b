@@ -5,12 +5,12 @@
 /**
  * Estados posibles de un contribuyente en la lista 69-B.
  */
-export type Sat69bStatus =
-  | "Presunto"
-  | "Definitivo"
-  | "Desvirtuado"
-  | "Sentencia Favorable"
-  | null;
+export enum Sat69bStatus {
+  PRESUNTO = "Presunto",
+  DEFINITIVO = "Definitivo",
+  DESVIRTUADO = "Desvirtuado",
+  SENTENCIA_FAVORABLE = "Sentencia Favorable",
+}
 
 /**
  * Información de un paso del proceso (presunción, desvirtuado, definitivo, sentencia).
@@ -28,7 +28,7 @@ export interface ProcessStep {
 export interface Sat69bRecord {
   rfc: string;
   nombre: string;
-  situacion: Sat69bStatus;
+  situacion: Sat69bStatus | null;
   presuncion: ProcessStep;
   desvirtuado: ProcessStep;
   definitivo: ProcessStep;
@@ -41,9 +41,18 @@ export interface Sat69bRecord {
 export interface StatusResponse {
   rfc: string;
   found: boolean;
-  status: Sat69bStatus;
+  status: Sat69bStatus | null;
   nombre?: string;
   record?: Sat69bRecord;
+}
+
+/**
+ * Estados posibles del proceso de sincronización.
+ */
+export enum SyncStatus {
+  SUCCESS = "success",
+  FAILED = "failed",
+  SKIPPED = "skipped",
 }
 
 /**
@@ -55,7 +64,7 @@ export interface SyncMetadata {
   csvHash: string;
   csvSize: number;
   syncDuration: number;
-  status: "success" | "failed" | "skipped";
+  status: SyncStatus;
   errorMessage?: string;
 }
 
