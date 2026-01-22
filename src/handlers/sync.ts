@@ -10,7 +10,7 @@ import {
   ScheduledEvent,
 } from "aws-lambda";
 import { ok, serverError } from "@miermontoto/lambda-responses";
-import { syncFromSat } from "@sat69b/services/csvSync";
+import { syncFromSat } from "@/services/csvSync";
 
 type SyncEvent = APIGatewayProxyEventV2 | ScheduledEvent;
 

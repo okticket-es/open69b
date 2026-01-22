@@ -9,9 +9,9 @@ import {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { ok, badRequest } from "@miermontoto/lambda-responses";
-import { isValidRfc, normalizeRfc } from "@sat69b/utils/rfcValidator";
-import { StatusResponse } from "@sat69b/utils/types";
-import { getRecordByRfc } from "@sat69b/services/sat69bRedis";
+import { isValidRfc, normalizeRfc } from "@/utils/rfcValidator";
+import { StatusResponse } from "@/utils/types";
+import { getRecordByRfc } from "@/services/sat69bRedis";
 
 /**
  * Handler de status.

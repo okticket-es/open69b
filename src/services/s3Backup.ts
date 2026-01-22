@@ -2,22 +2,13 @@
  * Servicio de backup del CSV a S3.
  */
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Wrapper } from "@miermontoto/s3";
 
 const S3_BUCKET = process.env.S3_BUCKET || "open69b-backups";
 const S3_REGION = process.env.S3_REGION || "eu-west-1";
 
-let s3Client: S3Client | null = null;
-
-/**
- * Obtiene o crea el cliente S3.
- */
-function getS3Client(): S3Client {
-  if (!s3Client) {
-    s3Client = new S3Client({ region: S3_REGION });
-  }
-  return s3Client;
-}
+// singleton instance
+const s3 = new S3Wrapper({ bucket: S3_BUCKET, region: S3_REGION });
 
 /**
  * Genera el key para el backup del CSV.
@@ -40,23 +31,21 @@ function generateBackupKey(): string {
  * @returns Key del objeto creado
  */
 export async function backupCsvToS3(csvContent: string): Promise<string> {
-  const client = getS3Client();
   const key = generateBackupKey();
 
   console.info(`Backing up CSV to S3: s3://${S3_BUCKET}/${key}`);
 
-  const command = new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: key,
-    Body: csvContent,
-    ContentType: "text/csv; charset=utf-8",
-    Metadata: {
+  const success = await s3.upload(key, csvContent, {
+    contentType: "text/csv; charset=utf-8",
+    metadata: {
       source: "sat-69b-sync",
       timestamp: new Date().toISOString(),
     },
   });
 
-  await client.send(command);
+  if (!success) {
+    throw new Error(`Failed to backup CSV to S3: ${key}`);
+  }
 
   console.info(`Backup completed: ${key}`);
   return key;

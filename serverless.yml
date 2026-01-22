@@ -65,7 +65,7 @@ custom:
 
 functions:
   sat69b:
-    handler: src/sat69b/handlers/api.handler
+    handler: src/handlers/api.handler
     events:
       - httpApi:
           path: /status/{rfc}
@@ -323,8 +323,8 @@ build:
     banner:
       js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
     external:
-      - '@aws-sdk/client-s3'
       - '@miermontoto/config'
       - '@miermontoto/lambda-handler'
       - '@miermontoto/lambda-responses'
+      - '@miermontoto/redis'
       - '@miermontoto/s3'

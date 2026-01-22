@@ -2,8 +2,8 @@
  * Servicio de descarga y sincronización del CSV del SAT.
  */
 
-import { parseCsv, calculateHash } from "@sat69b/utils/csvParser";
-import { Sat69bRecord, SyncMetadata, SyncResult } from "@sat69b/utils/types";
+import { parseCsv, calculateHash } from "@/utils/csvParser";
+import { Sat69bRecord, SyncMetadata, SyncResult } from "@/utils/types";
 import {
   bulkSetRecords,
   clearAllRecords,

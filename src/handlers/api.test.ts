@@ -1,18 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { APIGatewayProxyEventV2, Context, ScheduledEvent } from "aws-lambda";
 
-// mock redis antes de importar el handler
-vi.mock("@sat69b/services/redisClient", () => ({
-  getRedisClient: vi.fn(() => ({
-    get: vi.fn(),
-    set: vi.fn(),
-    ping: vi.fn().mockResolvedValue("PONG"),
-    dbsize: vi.fn().mockResolvedValue(100),
-  })),
-  closeRedisConnection: vi.fn(),
-}));
-
-vi.mock("@sat69b/services/sat69bRedis", () => ({
+// mock services antes de importar el handler
+vi.mock("@/services/sat69bRedis", () => ({
   getRecordByRfc: vi.fn(),
   getMetadata: vi.fn().mockResolvedValue({
     lastSyncAt: new Date().toISOString(),
@@ -31,7 +21,7 @@ vi.mock("@sat69b/services/sat69bRedis", () => ({
   clearAllRecords: vi.fn(),
 }));
 
-vi.mock("@sat69b/services/csvSync", () => ({
+vi.mock("@/services/csvSync", () => ({
   syncFromSat: vi.fn().mockResolvedValue({
     success: true,
     rowCount: 100,

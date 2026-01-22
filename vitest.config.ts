@@ -13,7 +13,7 @@ export default defineConfig({
     },
     include: ["src/**/*.test.ts"],
     alias: {
-      "@sat69b": path.resolve(__dirname, "./src/sat69b"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });

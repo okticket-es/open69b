@@ -10,7 +10,7 @@ import {
   getMetadata,
   countRecords,
   healthCheck,
-} from "@sat69b/services/sat69bRedis";
+} from "@/services/sat69bRedis";
 
 /**
  * Handler de metadata.

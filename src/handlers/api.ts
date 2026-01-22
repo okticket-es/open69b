@@ -5,9 +5,9 @@
 
 import { BaseHandler } from "@miermontoto/lambda-handler";
 import { notFound, unauthorized } from "@miermontoto/lambda-responses";
-import { handler as statusHandler } from "@sat69b/handlers/status";
-import { handler as metadataHandler } from "@sat69b/handlers/metadata";
-import { handler as syncHandler } from "@sat69b/handlers/sync";
+import { handler as statusHandler } from "@/handlers/status";
+import { handler as metadataHandler } from "@/handlers/metadata";
+import { handler as syncHandler } from "@/handlers/sync";
 import {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,

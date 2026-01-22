@@ -9,7 +9,6 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@sat69b/*": ["src/sat69b/*"],
       "@/*": ["src/*"]
     },
     "sourceMap": true,

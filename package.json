@@ -18,15 +18,14 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.700.0",
     "@miermontoto/config": "^1.2.1",
     "@miermontoto/lambda-handler": "^1.1.0",
     "@miermontoto/lambda-responses": "^1.0.1",
+    "@miermontoto/redis": "^1.0.0",
     "@miermontoto/s3": "^1.2.2",
     "aws-lambda": "^1.0.7",
     "csv-parse": "^5.5.0",
-    "dotenv": "^16.6.1",
-    "ioredis": "^5.4.1"
+    "dotenv": "^16.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
