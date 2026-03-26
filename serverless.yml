@@ -14,7 +14,7 @@ provider:
     cors: true
   environment:
     APP_NAME: ${env:APP_NAME, 'open69b'}
-    APP_VERSION: ${env:APP_VERSION, '1.1.0'}
+    APP_VERSION: ${env:APP_VERSION, '1.1.1'}
     API_KEY: ${env:API_KEY, ''}
     # producción: ElastiCache (Fn::GetAtt), local: usa .env
     REDIS_HOST:

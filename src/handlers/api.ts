@@ -81,6 +81,18 @@ class Sat69bApiHandler extends BaseHandler {
 
 /**
  * Instancia del handler y export.
+ * intercepta scheduled events antes de BaseHandler, que los trata como warmups.
  */
 const apiHandler = new Sat69bApiHandler();
-export const handler = apiHandler.handler.bind(apiHandler);
+const baseHandler = apiHandler.handler.bind(apiHandler);
+
+export const handler = async (
+  event: Sat69bEvent,
+  context: Context,
+  callback: Callback,
+): Promise<APIGatewayProxyStructuredResultV2> => {
+  if (isScheduledEvent(event)) {
+    return syncHandler(event);
+  }
+  return baseHandler(event, context, callback);
+};
