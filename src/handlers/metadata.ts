@@ -6,11 +6,7 @@
 
 import { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { ok } from "@miermontoto/lambda-responses";
-import {
-  getMetadata,
-  countRecords,
-  healthCheck,
-} from "@/services/sat69bRedis";
+import { getMetadata, countRecords, healthCheck } from "@/services/sat69bRedis";
 
 /**
  * Handler de metadata.
@@ -39,6 +35,8 @@ export async function handler(): Promise<APIGatewayProxyStructuredResultV2> {
           csvSize: metadata.csvSize,
           durationMs: metadata.syncDuration,
           errorMessage: metadata.errorMessage,
+          dataCutDate: metadata.dataCutDate ?? null,
+          skippedInvalidRfc: metadata.skippedInvalidRfc ?? null,
         }
       : null,
   };

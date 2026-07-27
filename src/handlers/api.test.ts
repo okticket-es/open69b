@@ -192,6 +192,139 @@ describe("API Handler", () => {
     });
   });
 
+  describe("respuesta de /status (compat v1 + expedientes)", () => {
+    const EMPTY_STEP = {
+      oficioSat: null,
+      fechaSat: null,
+      oficioDof: null,
+      fechaDof: null,
+    };
+    const expediente = (situacion: string, oficio: string): object => ({
+      situacion,
+      presuncion: { ...EMPTY_STEP, oficioSat: oficio },
+      desvirtuado: EMPTY_STEP,
+      definitivo: EMPTY_STEP,
+      sentenciaFavorable: EMPTY_STEP,
+    });
+
+    async function callStatus(
+      rfc: string,
+      asOf?: string,
+    ): Promise<{
+      statusCode: number | undefined;
+      body: Record<string, unknown>;
+    }> {
+      delete process.env.API_KEY;
+      vi.resetModules();
+      const { handler } = await import("./api");
+      const event = {
+        ...createMockEvent(`/status/${rfc}`, "GET"),
+        pathParameters: { rfc },
+        queryStringParameters: asOf ? { asOf } : undefined,
+      } as unknown as APIGatewayProxyEventV2;
+      const result = await handler(event, createMockContext(), () => {});
+      return {
+        statusCode: result.statusCode,
+        body: JSON.parse(result.body ?? "{}") as Record<string, unknown>,
+      };
+    }
+
+    it("respuesta v1 intacta + expedientes aditivo para RFC multi-expediente", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue({
+        rfc: "AAS110331G59",
+        nombre: "EMPRESA DOS",
+        situacion: "Definitivo",
+        expedientes: [
+          expediente("Definitivo", "Of-2020"),
+          expediente("Sentencia Favorable", "Of-2017"),
+        ],
+      } as never);
+
+      const { statusCode, body } = await callStatus("AAS110331G59");
+      expect(statusCode).toBe(200);
+      expect(body.found).toBe(true);
+      expect(body.status).toBe("Definitivo"); // el más severo
+      const record = body.record as Record<string, unknown>;
+      expect(record.situacion).toBe("Definitivo");
+      expect(record.presuncion).toBeDefined(); // forma plana v1 conservada
+      expect(body.expedientes).toHaveLength(2); // campo nuevo aditivo
+    });
+
+    it("con ?asOf devuelve verdict69b; sin él la respuesta v1 no cambia", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      const definitivo = {
+        rfc: "AAA120730823",
+        nombre: "EMPRESA TRES",
+        situacion: "Definitivo",
+        expedientes: [
+          {
+            situacion: "Definitivo",
+            presuncion: { ...EMPTY_STEP, fechaSat: "01/01/2020" },
+            desvirtuado: EMPTY_STEP,
+            definitivo: { ...EMPTY_STEP, fechaSat: "01/06/2020" },
+            sentenciaFavorable: EMPTY_STEP,
+          },
+        ],
+      };
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue(definitivo as never);
+
+      const sin = await callStatus("AAA120730823");
+      expect(sin.body.verdict69b).toBeUndefined();
+      expect(sin.body.asOf).toBeUndefined();
+
+      vi.mocked(
+        (await import("@/services/sat69bRedis")).getRecordByRfc,
+      ).mockResolvedValue(definitivo as never);
+      const dentro = await callStatus("AAA120730823", "2021-01-01");
+      expect(dentro.body.asOf).toBe("2021-01-01");
+      const v = dentro.body.verdict69b as Record<string, unknown>;
+      expect(v.vigente).toBe("Definitivo");
+
+      vi.mocked(
+        (await import("@/services/sat69bRedis")).getRecordByRfc,
+      ).mockResolvedValue(definitivo as never);
+      const antes = await callStatus("AAA120730823", "2019-06-01");
+      const v2 = antes.body.verdict69b as Record<string, unknown>;
+      expect(v2.vigente).toBeNull(); // gasto anterior a la entrada en lista
+    });
+
+    it("asOf con formato inválido → 400", async () => {
+      const { statusCode } = await callStatus("AAA120730823", "01/06/2021");
+      expect(statusCode).toBe(400);
+    });
+
+    it("RFC no listado con asOf → verdict limpio", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue(null as never);
+      const { body } = await callStatus("OKT250101AA1", "2024-01-01");
+      expect(body.found).toBe(false);
+      const v = body.verdict69b as Record<string, unknown>;
+      expect(v.vigente).toBeNull();
+      expect(v.exculpado).toBe(false);
+    });
+
+    it("tolera un record con formato viejo (pre-deploy) almacenado en Redis", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      // formato plano antiguo sin expedientes[]
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue({
+        rfc: "AAA080808HL8",
+        nombre: "EMPRESA UNO",
+        situacion: "Presunto",
+        presuncion: { ...EMPTY_STEP, oficioSat: "Of-2018" },
+        desvirtuado: EMPTY_STEP,
+        definitivo: EMPTY_STEP,
+        sentenciaFavorable: EMPTY_STEP,
+      } as never);
+
+      const { statusCode, body } = await callStatus("AAA080808HL8");
+      expect(statusCode).toBe(200);
+      expect(body.found).toBe(true);
+      expect(body.status).toBe("Presunto");
+      expect(body.expedientes).toHaveLength(1); // envuelto como expediente único
+    });
+  });
+
   describe("scheduled events", () => {
     it("procesa eventos programados sin auth", async () => {
       process.env.API_KEY = "test-secret-key";

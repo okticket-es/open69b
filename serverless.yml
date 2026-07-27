@@ -23,7 +23,7 @@ provider:
       Fn::GetAtt: [RedisCluster, RedisEndpoint.Port]
     S3_BUCKET: ${self:custom.backupBucket}
     S3_REGION: ${self:provider.region}
-    SAT_CSV_URL: ${env:SAT_CSV_URL, 'http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv'}
+    SAT_CSV_URL: ${env:SAT_CSV_URL, 'https://wu1agsprosta001.blob.core.windows.net/agsc-publicaciones/Datos_abiertos/Documents_AGAFF/Listado_completo_69-B.csv'}
   vpc:
     securityGroupIds:
       - Ref: LambdaSecurityGroup
@@ -299,6 +299,36 @@ resources:
             - Id: DeleteOldBackups
               Status: Enabled
               ExpirationInDays: 30
+
+    # alarma de frescura: el sync loguea "SAT_DATA_STALE" cuando el corte
+    # de datos del SAT supera los 90 días (habría cazado el espejo congelado)
+    StaleDataMetricFilter:
+      Type: AWS::Logs::MetricFilter
+      DependsOn: Sat69bLogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-sat69b
+        FilterPattern: '"SAT_DATA_STALE"'
+        MetricTransformations:
+          - MetricName: Sat69bStaleData
+            MetricNamespace: open69b
+            MetricValue: '1'
+            DefaultValue: 0
+
+    # sin AlarmActions: el canal de aviso (SNS/Slack) se decide con el equipo;
+    # mientras tanto la alarma es visible en la consola de CloudWatch
+    StaleDataAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-sat-data-stale
+        AlarmDescription: El corte de datos del CSV 69-B del SAT supera los 90 dias
+        Namespace: open69b
+        MetricName: Sat69bStaleData
+        Statistic: Sum
+        Period: 86400
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
 
   Outputs:
     RedisEndpoint:

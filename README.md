@@ -4,7 +4,7 @@ Servicio de consulta rápida para la lista 69-B del SAT (contribuyentes con oper
 
 ## Descripción
 
-- **Fuente**: [CSV 69-B del SAT](http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv) (~14k registros)
+- **Fuente**: [CSV 69-B del SAT](https://wu1agsprosta001.blob.core.windows.net/agsc-publicaciones/Datos_abiertos/Documents_AGAFF/Listado_completo_69-B.csv) (~14k registros)
 - **Stack**: Serverless Framework v4, AWS Lambda (Node.js 22.x), ElastiCache Redis
 - **Latencia**: Consultas sub-milisegundo vía Redis
 

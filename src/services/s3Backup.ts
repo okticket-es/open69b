@@ -3,6 +3,7 @@
  */
 
 import { S3Wrapper } from "@miermontoto/s3";
+import { CsvEncoding } from "@/utils/encoding";
 
 const S3_BUCKET = process.env.S3_BUCKET || "open69b-backups";
 const S3_REGION = process.env.S3_REGION || "eu-west-1";
@@ -27,16 +28,20 @@ function generateBackupKey(): string {
 /**
  * Sube el CSV a S3 como backup.
  *
- * @param csvContent - Contenido del CSV
+ * @param raw - Bytes crudos del CSV tal cual se descargó (sin re-codificar)
+ * @param encoding - Encoding real detectado (para etiquetar el objeto)
  * @returns Key del objeto creado
  */
-export async function backupCsvToS3(csvContent: string): Promise<string> {
+export async function backupCsvToS3(
+  raw: Uint8Array,
+  encoding: CsvEncoding = "windows-1252",
+): Promise<string> {
   const key = generateBackupKey();
 
   console.info(`Backing up CSV to S3: s3://${S3_BUCKET}/${key}`);
 
-  const success = await s3.upload(key, csvContent, {
-    contentType: "text/csv; charset=utf-8",
+  const success = await s3.upload(key, Buffer.from(raw), {
+    contentType: `text/csv; charset=${encoding}`,
     metadata: {
       source: "sat-69b-sync",
       timestamp: new Date().toISOString(),
