@@ -97,12 +97,14 @@ functions:
           enabled: true
 
   # artículo 69 (OKT-18900 Fase 2): función propia, no comparte memoria/timeout
-  # con sat69b — descarga 14 listas (~90MB) y hace un GetItem+merge+Put por
-  # RFC (para no perder entradas de "estado" cuando el RFC sale de la lista);
-  # timeout al máximo permitido por margen frente al volumen (~300k RFCs)
+  # con sat69b — descarga 14 listas (~90MB) y hace BatchGet+merge+BatchWrite
+  # por RFC (para no perder entradas de "estado" cuando el RFC sale de la
+  # lista). Memoria: el primer sync real (602k RFCs) picó a ~1240MB medidos;
+  # 2048 da margen frente al crecimiento de las listas del SAT. Timeout al
+  # máximo permitido; solo corre ~minutos una vez al día.
   art69Sync:
     handler: src/handlers/art69SyncHandler.handler
-    memorySize: 1536
+    memorySize: 2048
     timeout: 900
     events:
       - httpApi:
@@ -331,6 +333,13 @@ resources:
               Status: Enabled
               Prefix: backups/
               ExpirationInDays: 30
+            # esta regla existe en el bucket REAL (añadida fuera de CFN, id y
+            # valores verificados con get-bucket-lifecycle-configuration):
+            # declararla aquí evita que el update del lifecycle la borre
+            - Id: AbortIncompleteMultipartUpload
+              Status: Enabled
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 7
 
     # timeline por RFC del artículo 69 (OKT-18900 Fase 2): un item por RFC
     # con todas sus entries entre las 14 listas. On-demand: el volumen de
@@ -359,8 +368,14 @@ resources:
         RouteTableIds:
           - Ref: PrivateRouteTable
 
+    # Retain: la tabla acumula el histórico de salidas inferidas por diff,
+    # que es IRRECONSTRUIBLE (el SAT no lo publica) — no debe borrarse con
+    # el stack. Nota operativa: si el PRIMER deploy hiciera rollback, habría
+    # que borrar a mano la tabla vacía retenida antes de reintentar.
     Art69Table:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
       Properties:
         TableName: open69b-art69-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST

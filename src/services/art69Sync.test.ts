@@ -46,6 +46,7 @@ describe("syncArt69", () => {
     // por un test anterior: volver siempre al default antes de cada test.
     const snapshotStore = await import("@/art69/snapshotStore");
     vi.mocked(snapshotStore.readPreviousSnapshot).mockResolvedValue(null);
+    vi.mocked(snapshotStore.writeSnapshot).mockResolvedValue(undefined);
     const dynamoStore = await import("@/art69/dynamoStore");
     vi.mocked(dynamoStore.putArt69Records).mockResolvedValue({
       written: 0,
@@ -174,6 +175,36 @@ describe("syncArt69", () => {
     await syncArt69();
     expect(errores.some((e) => e.includes("ART69_SYNC_FAILED"))).toBe(true);
     spy.mockRestore();
+  });
+
+  it("si hubo escrituras FALLIDAS, los hashes de las listas procesadas NO se persisten (para reintentar mañana)", async () => {
+    const dynamo = await import("@/art69/dynamoStore");
+    vi.mocked(dynamo.putArt69Records).mockResolvedValue({
+      written: 5,
+      failed: 3,
+    });
+    const { syncArt69 } = await import("@/services/art69Sync");
+    await syncArt69();
+    const meta = vi.mocked(dynamo.putArt69Meta).mock.calls[0][0];
+    // sin hash "limpio" persistido, el siguiente sync re-procesa las listas
+    // y el merge deduplicado reintenta los records que fallaron
+    expect(Object.keys(meta.listas)).toHaveLength(0);
+    expect(meta.rfcsFallidos).toBe(3);
+  });
+
+  it("un fallo al guardar el snapshot en S3 NO impide la ingesta de esa lista", async () => {
+    const snapshotStore = await import("@/art69/snapshotStore");
+    vi.mocked(snapshotStore.writeSnapshot).mockRejectedValue(
+      new Error("S3 AccessDenied"),
+    );
+    const { syncArt69 } = await import("@/services/art69Sync");
+    const dynamo = await import("@/art69/dynamoStore");
+    const result = await syncArt69();
+    expect(result.listasOk).toBe(14); // ninguna lista marcada como fallida
+    const written = vi.mocked(dynamo.putArt69Records).mock.calls[0][0];
+    const record = written.find((r) => r.rfc === "AAA080808HL8");
+    // las 4 listas de estado (las que escriben snapshot) se ingirieron igual
+    expect(record!.entries.some((e) => e.listaId === "firmes")).toBe(true);
   });
 
   it("reporta rfcsEscritos/rfcsFallidos del resultado de putArt69Records", async () => {

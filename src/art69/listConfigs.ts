@@ -3,6 +3,16 @@
  * Cabeceras verificadas contra los ficheros reales del SAT (2026-07-29).
  * Los nombres de columna van sin acentos deliberadamente: el matcher de
  * columnas (columnMatcher.ts) normaliza sin acentos en ambos lados.
+ *
+ * DISCREPANCIA CON EL JIRA (OKT-18900), verificada contra el minisitio
+ * oficial del SAT y a validar con producto:
+ * - El ticket nombra "sentencia favorable" como supuesto del art. 69 y
+ *   "abandonado" como salida. NINGUNO existe como lista publicada del SAT.
+ * - Lo que sí publica el SAT es "Sentencias" (Sentencias.csv) = sentencias
+ *   CONDENATORIAS por delito fiscal — semántica OPUESTA a "favorable".
+ *   Aquí se ingiere como lista de estado con su nombre real.
+ * - "Sentencia favorable"/"desvirtuado" como exculpación sí existen, pero
+ *   en el 69-B (ver src/utils/verdict.ts), no en el art. 69.
  */
 
 import { Art69ListConfig } from "./types";

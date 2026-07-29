@@ -113,7 +113,16 @@ export async function syncArt69(): Promise<Art69SyncResult> {
         // el SAT actualiza ~trimestral: sin cambios no se acumula otra
         // copia fechada idéntica en S3 (los snapshots no caducan)
         if (previous !== content) {
-          await writeSnapshot(config.id, content, snapshotDate);
+          try {
+            await writeSnapshot(config.id, content, snapshotDate);
+          } catch (err) {
+            // el snapshot es infraestructura del DIFF, no de la ingesta:
+            // si S3 falla, la lista se ingesta igual y el diff del día
+            // siguiente usará el snapshot anterior (más antiguo pero válido)
+            console.error(
+              `art69Sync: fallo guardando snapshot de ${config.id} (non-critical): ${(err as Error).message}`,
+            );
+          }
         }
       }
 
@@ -158,6 +167,27 @@ export async function syncArt69(): Promise<Art69SyncResult> {
   }
 
   const duration = Date.now() - start;
+
+  // si hubo escrituras fallidas, NO persistir hashes "limpios" de las
+  // listas procesadas en esta pasada: el hash-skip del día siguiente se
+  // saltaría la lista y los records fallidos jamás se reintentarían
+  // (hasta que el SAT cambiara el fichero). Sin hash → re-proceso mañana,
+  // y el merge deduplicado hace el reintento idempotente.
+  if (rfcsFallidos > 0) {
+    for (const [id, m] of Object.entries(listasMeta)) {
+      if (!m.skipped) {
+        const prev = previousMeta?.listas?.[id];
+        if (prev) {
+          listasMeta[id] = prev;
+        } else {
+          delete listasMeta[id];
+        }
+      }
+    }
+    console.error(
+      `ART69_SYNC_PARTIAL rfcsFallidos=${rfcsFallidos} — hashes no actualizados para reintento`,
+    );
+  }
 
   await putArt69Meta({
     rfc: "_meta",
