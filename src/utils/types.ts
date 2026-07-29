@@ -2,6 +2,8 @@
  * Tipos para el servicio SAT 69-B.
  */
 
+import { Art69Timeline } from "@/art69/timeline";
+
 /**
  * Estados posibles de un contribuyente en la lista 69-B.
  */
@@ -93,8 +95,8 @@ export interface Verdict69b {
 
 /**
  * Respuesta simplificada para consulta de status.
- * `record` mantiene la forma plana histórica; `expedientes`, `asOf` y
- * `verdict69b` son aditivos (solo con ?asOf=).
+ * `record` mantiene la forma plana histórica; `expedientes`, `asOf`,
+ * `verdict69b` y `art69` son aditivos (solo con ?asOf=).
  */
 export interface StatusResponse {
   rfc: string;
@@ -105,6 +107,7 @@ export interface StatusResponse {
   expedientes?: Expediente[];
   asOf?: string;
   verdict69b?: Verdict69b;
+  art69?: Art69Timeline;
 }
 
 /**

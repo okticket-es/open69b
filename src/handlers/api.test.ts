@@ -29,6 +29,11 @@ vi.mock("@/services/csvSync", () => ({
   }),
 }));
 
+vi.mock("@/art69/dynamoStore", () => ({
+  getArt69Record: vi.fn().mockResolvedValue(null),
+  putArt69Records: vi.fn(),
+}));
+
 // helper para crear eventos mock
 function createMockEvent(
   path: string,
@@ -287,6 +292,40 @@ describe("API Handler", () => {
       const antes = await callStatus("AAA120730823", "2019-06-01");
       const v2 = antes.body.verdict69b as Record<string, unknown>;
       expect(v2.vigente).toBeNull(); // gasto anterior a la entrada en lista
+    });
+
+    it("con ?asOf incluye el bloque art69 aunque el RFC no esté en el 69-B", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      const art69 = await import("@/art69/dynamoStore");
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue(null as never);
+      vi.mocked(art69.getArt69Record).mockResolvedValue({
+        rfc: "AAA080808HL8",
+        nombre: "EMPRESA MOROSA",
+        entries: [
+          {
+            listaId: "firmes",
+            family: "estado",
+            supuesto: "FIRMES",
+            fecha: "2020-01-01",
+            monto: null,
+            entidadFederativa: null,
+            esResolucion: false,
+          },
+        ],
+      } as never);
+
+      const { body } = await callStatus("AAA080808HL8", "2023-01-01");
+      expect(body.found).toBe(false); // limpio en el 69-B
+      const bloque = body.art69 as Record<string, unknown>;
+      expect(bloque.supuestosVigentes).toHaveLength(1);
+      expect(bloque.enListaHoy).toBe(true);
+    });
+
+    it("sin ?asOf no consulta el artículo 69 (aditivo)", async () => {
+      const art69 = await import("@/art69/dynamoStore");
+      vi.mocked(art69.getArt69Record).mockClear();
+      await callStatus("AAA080808HL8");
+      expect(art69.getArt69Record).not.toHaveBeenCalled();
     });
 
     it("asOf con formato inválido → 400", async () => {

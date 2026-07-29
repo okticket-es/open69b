@@ -23,6 +23,8 @@ import {
 } from "@/utils/types";
 import { getRecordByRfc } from "@/services/sat69bRedis";
 import { computeVerdict } from "@/utils/verdict";
+import { getArt69Record } from "@/art69/dynamoStore";
+import { computeArt69Timeline } from "@/art69/timeline";
 
 const ASOF_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -110,41 +112,29 @@ export async function handler(
   }
 
   const rfc = normalizeRfc(rfcParam);
+  // el 69-B y el artículo 69 son listas independientes: se consultan las
+  // dos siempre, un RFC puede no estar en el 69-B y sí en el 69 (o viceversa)
   const stored = await getRecordByRfc(rfc);
+  const record = stored ? normalizeStoredRecord(stored) : null;
 
-  if (!stored) {
-    // no encontrado = no está en la lista 69-B (buenas noticias para el contribuyente)
-    const response: StatusResponse = {
-      rfc,
-      found: false,
-      status: null,
-    };
-    if (asOf) {
-      response.asOf = asOf;
-      response.verdict69b = {
-        vigente: null,
-        exculpado: false,
-        ventana: null,
-        expediente: null,
-      };
-    }
-    return ok(response);
-  }
+  const response: StatusResponse = record
+    ? {
+        rfc,
+        found: true,
+        status: record.situacion,
+        nombre: record.nombre,
+        record: buildV1Record(record),
+        expedientes: record.expedientes,
+      }
+    : { rfc, found: false, status: null };
 
-  const record = normalizeStoredRecord(stored);
-
-  // encontrado en la lista: respuesta v1 intacta + expedientes aditivo
-  const response: StatusResponse = {
-    rfc,
-    found: true,
-    status: record.situacion,
-    nombre: record.nombre,
-    record: buildV1Record(record),
-    expedientes: record.expedientes,
-  };
   if (asOf) {
     response.asOf = asOf;
-    response.verdict69b = computeVerdict(record, asOf);
+    response.verdict69b = record
+      ? computeVerdict(record, asOf)
+      : { vigente: null, exculpado: false, ventana: null, expediente: null };
+    const art69Record = await getArt69Record(rfc);
+    response.art69 = computeArt69Timeline(art69Record, asOf);
   }
 
   return ok(response);

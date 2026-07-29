@@ -18,6 +18,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1096.0",
+    "@aws-sdk/lib-dynamodb": "^3.1096.0",
     "@miermontoto/config": "^1.2.1",
     "@miermontoto/lambda-handler": "^1.1.0",
     "@miermontoto/lambda-responses": "^1.0.1",

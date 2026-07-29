@@ -41,6 +41,13 @@ provider:
           Resource:
             - arn:aws:s3:::${self:custom.backupBucket}
             - arn:aws:s3:::${self:custom.backupBucket}/*
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+          Resource:
+            - Fn::GetAtt: [Art69Table, Arn]
 
 plugins:
   - serverless-domain-manager
@@ -83,6 +90,26 @@ functions:
           name: sat69b-daily-sync
           description: 'Sync SAT 69-B list daily at 3:00 AM UTC'
           rate: cron(0 3 * * ? *)
+          enabled: true
+
+  # artículo 69 (OKT-18900 Fase 2): función propia, no comparte memoria/timeout
+  # con sat69b — descarga 14 listas (~90MB) y hace un GetItem+merge+Put por
+  # RFC (para no perder entradas de "estado" cuando el RFC sale de la lista);
+  # timeout al máximo permitido por margen frente al volumen (~300k RFCs)
+  art69Sync:
+    handler: src/handlers/art69SyncHandler.handler
+    memorySize: 1536
+    timeout: 900
+    environment:
+      ART69_TABLE_NAME: open69b-art69-${self:provider.stage}
+    events:
+      - httpApi:
+          path: /art69/sync
+          method: POST
+      - schedule:
+          name: art69-daily-sync
+          description: 'Sync de las 14 listas del articulo 69 CFF, diario a las 4:00 AM UTC'
+          rate: cron(0 4 * * ? *)
           enabled: true
 
 resources:
@@ -288,7 +315,9 @@ resources:
           - Key: Name
             Value: ${self:service}-redis
 
-    # s3 bucket para backups
+    # s3 bucket para backups. Los snapshots del artículo 69 (prefijo
+    # snapshots/, sin regla de expiración) son la base del diff de salidas
+    # y de la auditoría — NO deben caducar como los backups/ de 30 días.
     BackupBucket:
       Type: AWS::S3::Bucket
       DeletionPolicy: Retain
@@ -298,7 +327,47 @@ resources:
           Rules:
             - Id: DeleteOldBackups
               Status: Enabled
+              Prefix: backups/
               ExpirationInDays: 30
+
+    # timeline por RFC del artículo 69 (OKT-18900 Fase 2): un item por RFC
+    # con todas sus entries entre las 14 listas. On-demand: el volumen de
+    # escritura es un pico diario, no un tráfico sostenido.
+    # Gateway Endpoints (gratis) para DynamoDB y S3: sin ellos, todo el
+    # tráfico de art69Sync (~600k GetItem/BatchWrite) y de los backups del
+    # 69-B sale por el único NatGateway hacia el endpoint público, con más
+    # latencia y compitiendo por el mismo recurso con el sync del 69-B.
+    DynamoDBVPCEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        VpcId:
+          Ref: VPC
+        ServiceName: !Sub com.amazonaws.${self:provider.region}.dynamodb
+        VpcEndpointType: Gateway
+        RouteTableIds:
+          - Ref: PrivateRouteTable
+
+    S3VPCEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        VpcId:
+          Ref: VPC
+        ServiceName: !Sub com.amazonaws.${self:provider.region}.s3
+        VpcEndpointType: Gateway
+        RouteTableIds:
+          - Ref: PrivateRouteTable
+
+    Art69Table:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: open69b-art69-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: rfc
+            AttributeType: S
+        KeySchema:
+          - AttributeName: rfc
+            KeyType: HASH
 
     # alarma de frescura: el sync loguea "SAT_DATA_STALE" cuando el corte
     # de datos del SAT supera los 90 días (habría cazado el espejo congelado)
