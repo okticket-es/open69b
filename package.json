@@ -1,7 +1,7 @@
 {
   "name": "open69b",
   "author": "Juan Mier",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Fast lookup service for Mexico's SAT 69-B list",
   "private": true,
   "type": "module",

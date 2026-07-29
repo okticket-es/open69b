@@ -65,8 +65,12 @@ function mergeWithExisting(
   incoming: Art69Record,
 ): Art69Record {
   if (!existing) return incoming;
-  const seen = new Set(existing.entries.map(entryKey));
-  const entries = [...existing.entries];
+  // un item corrupto/legacy sin entries no debe reventar el sync entero
+  const existingEntries = Array.isArray(existing.entries)
+    ? existing.entries
+    : [];
+  const seen = new Set(existingEntries.map(entryKey));
+  const entries = [...existingEntries];
   for (const e of incoming.entries) {
     const key = entryKey(e);
     if (!seen.has(key)) {

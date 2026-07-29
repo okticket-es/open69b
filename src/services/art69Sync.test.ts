@@ -94,6 +94,26 @@ describe("syncArt69", () => {
     expect(salida!.entries.some((e) => e.esSalidaPorDiff)).toBe(true);
   });
 
+  it("NO reescribe el snapshot fechado si el contenido no cambió (el SAT actualiza ~trimestral)", async () => {
+    const snapshotStore = await import("@/art69/snapshotStore");
+    // el snapshot anterior es EXACTAMENTE el mismo contenido que devuelve
+    // el mock de fetch para firmes: no debe escribirse otra copia
+    const firmesConfig = ART69_LISTS.find((l) => l.id === "firmes")!;
+    vi.mocked(snapshotStore.readPreviousSnapshot).mockImplementation(
+      (listaId: string) =>
+        Promise.resolve(
+          listaId === "firmes" ? byUrl.get(firmesConfig.url)! : null,
+        ),
+    );
+    const { syncArt69 } = await import("@/services/art69Sync");
+    await syncArt69();
+    const escritos = vi
+      .mocked(snapshotStore.writeSnapshot)
+      .mock.calls.map((c) => c[0]);
+    expect(escritos).not.toContain("firmes"); // sin cambios → sin escritura
+    expect(escritos).toContain("no_localizados"); // sin snapshot previo → sí escribe
+  });
+
   it("reporta rfcsEscritos/rfcsFallidos del resultado de putArt69Records", async () => {
     const dynamo = await import("@/art69/dynamoStore");
     vi.mocked(dynamo.putArt69Records).mockResolvedValue({

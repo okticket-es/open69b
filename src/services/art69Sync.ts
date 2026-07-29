@@ -82,7 +82,11 @@ export async function syncArt69(): Promise<Art69SyncResult> {
             }
           }
         }
-        await writeSnapshot(config.id, content, snapshotDate);
+        // el SAT actualiza ~trimestral: sin cambios no se acumula otra
+        // copia fechada idéntica en S3 (los snapshots no caducan)
+        if (previous !== content) {
+          await writeSnapshot(config.id, content, snapshotDate);
+        }
       }
 
       mergeInto(merged, byRfc);

@@ -1,0 +1,8 @@
+# pnpm 11: build-scripts de dependencias explícitamente NO permitidos
+# (ninguno es necesario: esbuild trae su binario como optional dep, y
+# aws-sdk/serverless funcionan sin postinstall). Sin este fichero, el
+# `pnpm install` interno de `sls package` falla con ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  aws-sdk: false
+  esbuild: false
+  serverless: false

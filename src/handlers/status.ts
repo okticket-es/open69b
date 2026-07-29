@@ -112,8 +112,22 @@ export async function handler(
   }
 
   const rfc = normalizeRfc(rfcParam);
+
   // el 69-B y el artículo 69 son listas independientes: se consultan las
-  // dos siempre, un RFC puede no estar en el 69-B y sí en el 69 (o viceversa)
+  // dos (en paralelo), un RFC puede estar en una y no en la otra. El bloque
+  // art69 es INFORMATIVO: si DynamoDB falla se degrada a timeline vacío con
+  // log — jamás puede tumbar la respuesta, porque el verdict69b del 69-B es
+  // el que decide bloqueos reales en george-core (que es fail-open ante un
+  // 500: un fallo aquí desactivaría el bloqueo en silencio).
+  const art69Promise = asOf
+    ? getArt69Record(rfc).catch((err: Error) => {
+        console.error(
+          `art69 lookup falló para ${rfc} (non-critical): ${err.message}`,
+        );
+        return null;
+      })
+    : null;
+
   const stored = await getRecordByRfc(rfc);
   const record = stored ? normalizeStoredRecord(stored) : null;
 
@@ -128,13 +142,12 @@ export async function handler(
       }
     : { rfc, found: false, status: null };
 
-  if (asOf) {
+  if (asOf && art69Promise) {
     response.asOf = asOf;
     response.verdict69b = record
       ? computeVerdict(record, asOf)
       : { vigente: null, exculpado: false, ventana: null, expediente: null };
-    const art69Record = await getArt69Record(rfc);
-    response.art69 = computeArt69Timeline(art69Record, asOf);
+    response.art69 = computeArt69Timeline(await art69Promise, asOf);
   }
 
   return ok(response);

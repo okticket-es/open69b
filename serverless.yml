@@ -24,6 +24,10 @@ provider:
     S3_BUCKET: ${self:custom.backupBucket}
     S3_REGION: ${self:provider.region}
     SAT_CSV_URL: ${env:SAT_CSV_URL, 'https://wu1agsprosta001.blob.core.windows.net/agsc-publicaciones/Datos_abiertos/Documents_AGAFF/Listado_completo_69-B.csv'}
+    # a nivel provider (no solo en art69Sync): la función sat69b también lee
+    # la tabla desde /status/{rfc}?asOf= — sin esto dependería del default
+    # hardcodeado del código, que solo coincide por casualidad en prod
+    ART69_TABLE_NAME: open69b-art69-${self:provider.stage}
   vpc:
     securityGroupIds:
       - Ref: LambdaSecurityGroup
@@ -100,8 +104,6 @@ functions:
     handler: src/handlers/art69SyncHandler.handler
     memorySize: 1536
     timeout: 900
-    environment:
-      ART69_TABLE_NAME: open69b-art69-${self:provider.stage}
     events:
       - httpApi:
           path: /art69/sync

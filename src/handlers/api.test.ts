@@ -321,6 +321,41 @@ describe("API Handler", () => {
       expect(bloque.enListaHoy).toBe(true);
     });
 
+    it("un fallo de DynamoDB en art69 NO tumba /status: el verdict69b (que decide bloqueos) sobrevive", async () => {
+      const redis = await import("@/services/sat69bRedis");
+      const art69 = await import("@/art69/dynamoStore");
+      vi.mocked(redis.getRecordByRfc).mockResolvedValue({
+        rfc: "AAA120730823",
+        nombre: "EMPRESA TRES",
+        situacion: "Definitivo",
+        expedientes: [
+          {
+            situacion: "Definitivo",
+            presuncion: { ...EMPTY_STEP, fechaSat: "01/01/2020" },
+            desvirtuado: EMPTY_STEP,
+            definitivo: { ...EMPTY_STEP, fechaSat: "01/06/2020" },
+            sentenciaFavorable: EMPTY_STEP,
+          },
+        ],
+      } as never);
+      vi.mocked(art69.getArt69Record).mockRejectedValue(
+        new Error("ProvisionedThroughputExceededException"),
+      );
+
+      const { statusCode, body } = await callStatus(
+        "AAA120730823",
+        "2024-01-01",
+      );
+      expect(statusCode).toBe(200); // no 500
+      const v = body.verdict69b as Record<string, unknown>;
+      expect(v.vigente).toBe("Definitivo"); // el veredicto 69-B intacto
+      const bloque = body.art69 as Record<string, unknown>;
+      expect(bloque.supuestosVigentes).toEqual([]); // art69 degradado a vacío
+
+      // restaurar el default: mockRejectedValue persiste tras clearAllMocks
+      vi.mocked(art69.getArt69Record).mockResolvedValue(null as never);
+    });
+
     it("sin ?asOf no consulta el artículo 69 (aditivo)", async () => {
       const art69 = await import("@/art69/dynamoStore");
       vi.mocked(art69.getArt69Record).mockClear();

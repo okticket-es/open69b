@@ -165,4 +165,25 @@ describe("putArt69Records — fallo permanente (throttling sostenido)", () => {
     expect(requestedKeys.length).toBe(2); // 100 + 50
     expect(requestedKeys.reduce((a, b) => a + b, 0)).toBe(150);
   });
+
+  it("un item corrupto en Dynamo (sin entries) no revienta el merge del sync", async () => {
+    sendMock.mockImplementation((cmd: MockCommand) => {
+      if (cmd.__type === "BatchGetCommand") {
+        // item legacy/corrupto: existe pero sin array entries
+        return Promise.resolve({
+          Responses: {
+            [Object.keys(cmd.input.RequestItems)[0]]: [
+              { rfc: "AAA080808HL8", nombre: "CORRUPTO" },
+            ],
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const { putArt69Records } = await import("@/art69/dynamoStore");
+    const result = await putArt69Records([record("AAA080808HL8")]);
+    expect(result.written).toBe(1);
+    expect(result.failed).toBe(0);
+  });
 });
