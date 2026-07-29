@@ -32,6 +32,8 @@ vi.mock("@/services/csvSync", () => ({
 vi.mock("@/art69/dynamoStore", () => ({
   getArt69Record: vi.fn().mockResolvedValue(null),
   putArt69Records: vi.fn(),
+  getArt69Meta: vi.fn().mockResolvedValue(null),
+  putArt69Meta: vi.fn(),
 }));
 
 // helper para crear eventos mock

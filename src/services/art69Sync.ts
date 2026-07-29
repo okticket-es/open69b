@@ -2,19 +2,32 @@
  * Orquestador del sync del artículo 69: descarga las 14 listas, detecta
  * salidas por diff en las de "estado", fusiona por RFC entre listas y
  * persiste en DynamoDB. No bloquea nada — solo detecta y traza (Hito 2).
+ *
+ * Skip por hash: el SAT actualiza ~trimestral, así que una lista cuyo
+ * contenido no cambió desde el último sync no se re-parsea ni re-escribe
+ * (ahorra ~600k escrituras diarias idénticas a DynamoDB). El hash por
+ * lista se persiste en el item "_meta" de la propia tabla, que además da
+ * visibilidad del último sync (expuesto en /metadata).
  */
 
 import { ART69_LISTS } from "@/art69/listConfigs";
 import { extractRfcs, parseArt69Csv } from "@/art69/parser";
 import { aggregateArt69ByRfc, detectExits } from "@/art69/aggregate";
 import { readPreviousSnapshot, writeSnapshot } from "@/art69/snapshotStore";
-import { putArt69Records } from "@/art69/dynamoStore";
+import {
+  Art69SyncMeta,
+  getArt69Meta,
+  putArt69Meta,
+  putArt69Records,
+} from "@/art69/dynamoStore";
+import { calculateHash } from "@/utils/csvParser";
 import { decodeCsvBuffer } from "@/utils/encoding";
 import { Art69Record } from "@/art69/types";
 
 export interface Art69SyncResult {
   listasOk: number;
   listasFallidas: string[];
+  listasSinCambios: number;
   rfcsTotal: number;
   rfcsEscritos: number;
   rfcsFallidos: number;
@@ -50,9 +63,24 @@ export async function syncArt69(): Promise<Art69SyncResult> {
   const listasFallidas: string[] = [];
   const snapshotDate = new Date().toISOString().slice(0, 10);
 
+  const previousMeta = await getArt69Meta();
+  const listasMeta: Art69SyncMeta["listas"] = {};
+  let listasSinCambios = 0;
+
   for (const config of ART69_LISTS) {
     try {
       const content = await downloadList(config.url);
+      const hash = await calculateHash(content);
+
+      const previousListMeta = previousMeta?.listas?.[config.id];
+      if (previousListMeta?.hash === hash) {
+        // sin cambios desde el último sync: ni parseo, ni diff, ni escritura
+        // (el merge en Dynamo ya conserva lo persistido anteriormente)
+        listasMeta[config.id] = { ...previousListMeta, skipped: true };
+        listasSinCambios++;
+        continue;
+      }
+
       const { entries } = parseArt69Csv(content, config);
       const byRfc = aggregateArt69ByRfc(entries);
 
@@ -90,12 +118,26 @@ export async function syncArt69(): Promise<Art69SyncResult> {
       }
 
       mergeInto(merged, byRfc);
+      listasMeta[config.id] = { hash, rows: entries.length, skipped: false };
     } catch (err) {
       console.error(
         `art69Sync: fallo en lista ${config.id}: ${(err as Error).message}`,
       );
       listasFallidas.push(config.id);
+      // conservar el hash previo (si lo hay) para que el próximo sync
+      // reintente esta lista en vez de saltársela
+      if (previousMeta?.listas?.[config.id]) {
+        listasMeta[config.id] = previousMeta.listas[config.id];
+      }
     }
+  }
+
+  if (listasFallidas.length > 0) {
+    // token estable para el MetricFilter/alarma de CloudWatch — el mismo
+    // patrón que SAT_DATA_STALE en el sync del 69-B
+    console.error(
+      `ART69_SYNC_FAILED lists=${listasFallidas.length} ids=${listasFallidas.join(",")}`,
+    );
   }
 
   const records = Array.from(merged.values());
@@ -115,12 +157,25 @@ export async function syncArt69(): Promise<Art69SyncResult> {
     );
   }
 
+  const duration = Date.now() - start;
+
+  await putArt69Meta({
+    rfc: "_meta",
+    lastSyncAt: new Date().toISOString(),
+    listas: listasMeta,
+    rfcsEscritos,
+    rfcsFallidos,
+    listasFallidas,
+    duration,
+  });
+
   return {
     listasOk: ART69_LISTS.length - listasFallidas.length,
     listasFallidas,
+    listasSinCambios,
     rfcsTotal: records.length,
     rfcsEscritos,
     rfcsFallidos,
-    duration: Date.now() - start,
+    duration,
   };
 }

@@ -13,14 +13,23 @@
  * - "Informativo" = supuesto independiente que no cierra nada que rastreemos
  *   (ReduccionArt74, CSDsinefectos, EntesPublicos): va directo a `eventos`.
  *
- * LIMITACIÓN CONOCIDA (a validar con producto, confirmada con datos reales
- * del 2026-07-29): el emparejamiento FIFO cronológico puede vincular
- * causalmente eventos administrativos que en realidad son independientes.
- * Ej. real: RFC CEF101103UQ1 tiene 2 entradas (No localizados 2014, Firmes
- * 2016) y 2 filas de Cancelados con créditos distintos (montos y fechas
- * distintas) — el algoritmo empareja por orden, no porque el SAT haya
- * establecido esa relación. No hay forma de distinguir esto de un cierre
- * real sin una vinculación explícita que el SAT no publica.
+ * REGLAS DE COMPATIBILIDAD entrada→salida (del propio Jira OKT-18900:
+ * "las combinaciones de salida dependen del supuesto de entrada"):
+ * - "No localizados": su ÚNICA salida posible es la eliminación de su
+ *   propia lista (regla explícita del ticket). Una cancelación/condonación
+ *   de crédito NO lo cierra.
+ * - "Sentencias": ídem — solo se cierra por eliminación de su lista.
+ * - "Firmes"/"Exigibles" (créditos): se cierran por cancelados/condonados/
+ *   retorno de inversiones, o por eliminación de su propia lista.
+ * - Una salida por diff (eliminación) solo cierra la entrada de SU MISMA
+ *   lista, nunca la de otra.
+ *
+ * LIMITACIÓN RESIDUAL (a validar con producto, confirmada con datos reales
+ * del 2026-07-29): dentro de las combinaciones compatibles, el
+ * emparejamiento sigue siendo FIFO cronológico y puede vincular un crédito
+ * cancelado con la entrada "equivocada" si un RFC tiene varios créditos
+ * (ej. real: CEF101103UQ1, 2 filas de Cancelados independientes). El SAT
+ * no publica la vinculación explícita crédito↔lista.
  */
 
 import { Art69Entry, Art69Record } from "./types";
@@ -46,6 +55,23 @@ const EMPTY: Art69Timeline = {
   eventos: [],
   enListaHoy: false,
 };
+
+/** Listas de estado que representan CRÉDITOS fiscales: las únicas que una
+ * cancelación/condonación/retorno de inversiones puede resolver. */
+const LISTAS_DE_CREDITO = new Set(["firmes", "exigibles"]);
+
+/**
+ * ¿Puede esta resolución cerrar esta entrada? (reglas del Jira OKT-18900)
+ */
+function puedeResolver(entrada: Art69Entry, resolucion: Art69Entry): boolean {
+  if (resolucion.esSalidaPorDiff) {
+    // la eliminación de una lista solo cierra la entrada de ESA lista
+    return resolucion.listaId === entrada.listaId;
+  }
+  // cancelados/condonados/retorno resuelven créditos; "no localizados" y
+  // "sentencias" SOLO salen por eliminación de su propia lista
+  return LISTAS_DE_CREDITO.has(entrada.listaId);
+}
 
 function vigenteEn(
   entrada: Art69Entry,
@@ -93,7 +119,10 @@ export function computeArt69Timeline(
   entradas.forEach((entrada, idx) => {
     for (let i = 0; i < resoluciones.length; i++) {
       if (usadas.has(i)) continue;
-      if (resoluciones[i].fecha! > entrada.fecha!) {
+      if (
+        resoluciones[i].fecha! > entrada.fecha! &&
+        puedeResolver(entrada, resoluciones[i])
+      ) {
         cierrePorEntrada.set(idx, resoluciones[i]);
         usadas.add(i);
         break;

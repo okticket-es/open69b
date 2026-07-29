@@ -4,6 +4,8 @@ import { Art69ListConfig } from "@/art69/types";
 
 vi.mock("@/art69/dynamoStore", () => ({
   putArt69Records: vi.fn().mockResolvedValue({ written: 0, failed: 0 }),
+  getArt69Meta: vi.fn().mockResolvedValue(null),
+  putArt69Meta: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/art69/snapshotStore", () => ({
   readPreviousSnapshot: vi.fn().mockResolvedValue(null),
@@ -49,6 +51,7 @@ describe("syncArt69", () => {
       written: 0,
       failed: 0,
     });
+    vi.mocked(dynamoStore.getArt69Meta).mockResolvedValue(null);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
@@ -112,6 +115,65 @@ describe("syncArt69", () => {
       .mock.calls.map((c) => c[0]);
     expect(escritos).not.toContain("firmes"); // sin cambios → sin escritura
     expect(escritos).toContain("no_localizados"); // sin snapshot previo → sí escribe
+  });
+
+  it("una lista cuyo hash no cambió desde el último sync se SALTA (ni parseo ni escritura)", async () => {
+    const { calculateHash } = await import("@/utils/csvParser");
+    const dynamo = await import("@/art69/dynamoStore");
+    const firmesConfig = ART69_LISTS.find((l) => l.id === "firmes")!;
+    const firmesHash = await calculateHash(byUrl.get(firmesConfig.url)!);
+    vi.mocked(dynamo.getArt69Meta).mockResolvedValue({
+      rfc: "_meta",
+      lastSyncAt: "2026-07-28T04:00:00.000Z",
+      listas: { firmes: { hash: firmesHash, rows: 1, skipped: false } },
+      rfcsEscritos: 1,
+      rfcsFallidos: 0,
+      listasFallidas: [],
+      duration: 1,
+    });
+
+    const { syncArt69 } = await import("@/services/art69Sync");
+    const result = await syncArt69();
+    expect(result.listasSinCambios).toBe(1);
+    // firmes no aporta records: el RFC del fixture solo llega por las otras 13
+    const written = vi.mocked(dynamo.putArt69Records).mock.calls[0][0];
+    const record = written.find((r) => r.rfc === "AAA080808HL8");
+    expect(record!.entries.some((e) => e.listaId === "firmes")).toBe(false);
+  });
+
+  it("persiste el meta al final con lastSyncAt y hash por lista", async () => {
+    const dynamo = await import("@/art69/dynamoStore");
+    const { syncArt69 } = await import("@/services/art69Sync");
+    await syncArt69();
+    expect(vi.mocked(dynamo.putArt69Meta)).toHaveBeenCalledTimes(1);
+    const meta = vi.mocked(dynamo.putArt69Meta).mock.calls[0][0];
+    expect(meta.rfc).toBe("_meta");
+    expect(Object.keys(meta.listas)).toHaveLength(14);
+    expect(meta.listas.firmes.hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("emite el token ART69_SYNC_FAILED si alguna lista falla (para la alarma)", async () => {
+    const errores: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((msg: string) => {
+      errores.push(String(msg));
+    });
+    vi.mocked(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      (url: string) => {
+        if (url.includes("Firmes.csv")) {
+          return Promise.reject(new Error("network down"));
+        }
+        const content = byUrl.get(url);
+        if (!content) throw new Error(`fixture no definido para ${url}`);
+        return Promise.resolve({
+          ok: true,
+          arrayBuffer: async () => new TextEncoder().encode(content).buffer,
+        });
+      },
+    );
+    const { syncArt69 } = await import("@/services/art69Sync");
+    await syncArt69();
+    expect(errores.some((e) => e.includes("ART69_SYNC_FAILED"))).toBe(true);
+    spy.mockRestore();
   });
 
   it("reporta rfcsEscritos/rfcsFallidos del resultado de putArt69Records", async () => {

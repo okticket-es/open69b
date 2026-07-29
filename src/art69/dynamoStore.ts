@@ -232,3 +232,48 @@ export async function getArt69Record(rfc: string): Promise<Art69Record | null> {
   );
   return (result.Item as Art69Record | undefined) ?? null;
 }
+
+/** Clave especial del item de metadata del sync ("_meta" nunca es un RFC
+ * válido: isValidRfc lo rechaza, así que /status no puede alcanzarlo). */
+const META_KEY = "_meta";
+
+/** Metadata del último sync del artículo 69, persistida en la propia tabla. */
+export interface Art69SyncMeta {
+  rfc: string; // siempre "_meta"
+  lastSyncAt: string;
+  listas: Record<string, { hash: string; rows: number; skipped: boolean }>;
+  rfcsEscritos: number;
+  rfcsFallidos: number;
+  listasFallidas: string[];
+  duration: number;
+}
+
+/** Lee el meta del último sync; null si nunca corrió o si falla (fail-safe). */
+export async function getArt69Meta(): Promise<Art69SyncMeta | null> {
+  try {
+    const result = await doc.send(
+      new GetCommand({ TableName: TABLE_NAME, Key: { rfc: META_KEY } }),
+    );
+    return (result.Item as Art69SyncMeta | undefined) ?? null;
+  } catch (err) {
+    console.error(
+      `art69 getArt69Meta (non-critical): ${(err as Error).message}`,
+    );
+    return null;
+  }
+}
+
+/** Persiste el meta del sync (fail-safe: un fallo aquí no tira el sync). */
+export async function putArt69Meta(meta: Art69SyncMeta): Promise<void> {
+  try {
+    await doc.send(
+      new BatchWriteCommand({
+        RequestItems: { [TABLE_NAME]: [{ PutRequest: { Item: meta } }] },
+      }),
+    );
+  } catch (err) {
+    console.error(
+      `art69 putArt69Meta (non-critical): ${(err as Error).message}`,
+    );
+  }
+}

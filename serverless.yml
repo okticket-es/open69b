@@ -385,6 +385,35 @@ resources:
             MetricValue: '1'
             DefaultValue: 0
 
+    # el sync del artículo 69 emite "ART69_SYNC_FAILED lists=N" cuando alguna
+    # de las 14 listas falla — mismo patrón que SAT_DATA_STALE: sin esto, un
+    # sync fallando a diario sería invisible (como lo fue el espejo congelado)
+    Art69SyncFailedMetricFilter:
+      Type: AWS::Logs::MetricFilter
+      DependsOn: Art69SyncLogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-art69Sync
+        FilterPattern: '"ART69_SYNC_FAILED"'
+        MetricTransformations:
+          - MetricName: Art69SyncFailed
+            MetricNamespace: open69b
+            MetricValue: '1'
+            DefaultValue: 0
+
+    Art69SyncFailedAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-art69-sync-failed
+        AlarmDescription: Alguna de las 14 listas del articulo 69 esta fallando en el sync diario
+        Namespace: open69b
+        MetricName: Art69SyncFailed
+        Statistic: Sum
+        Period: 86400
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+
     # sin AlarmActions: el canal de aviso (SNS/Slack) se decide con el equipo;
     # mientras tanto la alarma es visible en la consola de CloudWatch
     StaleDataAlarm:

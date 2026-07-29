@@ -217,6 +217,72 @@ describe("computeArt69Timeline", () => {
     expect(t.enListaHoy).toBe(true);
   });
 
+  it("REGLA DEL JIRA: 'no localizados' SOLO sale por eliminado — una cancelación NO lo cierra", () => {
+    const r = record(
+      entrada("no_localizados", "NO LOCALIZADOS", "2015-01-01"),
+      resolucion("cancelados", "CANCELADOS", "2017-06-01", 9000),
+    );
+    // la cancelación de un crédito no saca al RFC de "no localizados":
+    // sigue vigente hoy, la cancelación queda solo como evento
+    const t = computeArt69Timeline(r, "2026-07-29");
+    expect(t.supuestosVigentes).toEqual([
+      {
+        supuesto: "NO LOCALIZADOS",
+        listaId: "no_localizados",
+        desde: "2015-01-01",
+        hasta: null,
+      },
+    ]);
+    expect(t.enListaHoy).toBe(true);
+    expect(t.eventos).toHaveLength(1); // la cancelación no se pierde
+  });
+
+  it("una salida por diff solo cierra la entrada de SU MISMA lista", () => {
+    const r = record(
+      entrada("exigibles", "EXIGIBLES", "2015-01-01"),
+      entrada("firmes", "FIRMES", "2016-01-01"),
+      salidaPorDiff("firmes", "2020-01-01"),
+    );
+    const t = computeArt69Timeline(r, "2026-07-29");
+    // firmes se cerró por su propia desaparición; exigibles sigue vigente
+    expect(t.supuestosVigentes).toEqual([
+      {
+        supuesto: "EXIGIBLES",
+        listaId: "exigibles",
+        desde: "2015-01-01",
+        hasta: null,
+      },
+    ]);
+  });
+
+  it("cancelados/condonados cierran créditos (firmes/exigibles), respetando la más antigua", () => {
+    const r = record(
+      entrada("no_localizados", "NO LOCALIZADOS", "2014-01-01"),
+      entrada("firmes", "FIRMES", "2016-01-01"),
+      resolucion("cancelados", "CANCELADOS", "2017-01-01", 8800),
+    );
+    const t = computeArt69Timeline(r, "2026-07-29");
+    // la cancelación cierra FIRMES (crédito), no "no localizados"
+    expect(t.supuestosVigentes).toEqual([
+      {
+        supuesto: "NO LOCALIZADOS",
+        listaId: "no_localizados",
+        desde: "2014-01-01",
+        hasta: null,
+      },
+    ]);
+  });
+
+  it("'sentencias' tampoco se cierra por cancelación/condonación (solo por eliminación de su lista)", () => {
+    const r = record(
+      entrada("sentencias", "SENTENCIAS", "2015-01-01"),
+      resolucion("condonados_146b", "CONDONADOS", "2018-01-01", 100),
+    );
+    const t = computeArt69Timeline(r, "2026-07-29");
+    expect(t.supuestosVigentes).toHaveLength(1);
+    expect(t.supuestosVigentes[0].listaId).toBe("sentencias");
+  });
+
   it("entrada sin fecha (null) se ignora de forma conservadora", () => {
     const r = record({
       ...entrada("firmes", "FIRMES", "2020-01-01"),
