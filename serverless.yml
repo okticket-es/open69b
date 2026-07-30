@@ -429,6 +429,49 @@ resources:
         ComparisonOperator: GreaterThanOrEqualToThreshold
         TreatMissingData: notBreaching
 
+    # Aviso de coste: acotado a DynamoDB + Lambda en us-east-1, que es lo que
+    # aporta el articulo 69 (hoy ~$0,20/mes). El riesgo real es que el SAT
+    # empiece a publicar cambios a diario y el skip por hash deje de saltar:
+    # cada sync completo son ~606k escrituras (~$0,76). Si esto llega a $10
+    # al mes, algo se ha desmadrado y conviene mirarlo.
+    # NOTA: no cubre NAT ni ElastiCache (~$44/mes) porque ya existian antes
+    # y dispararian el umbral desde el minuto uno.
+    Art69CostBudget:
+      Type: AWS::Budgets::Budget
+      Properties:
+        Budget:
+          BudgetName: ${self:service}-${self:provider.stage}-art69-coste
+          BudgetType: COST
+          TimeUnit: MONTHLY
+          BudgetLimit:
+            Amount: 10
+            Unit: USD
+          CostFilters:
+            Region:
+              - ${self:provider.region}
+            Service:
+              - Amazon DynamoDB
+              - AWS Lambda
+        NotificationsWithSubscribers:
+          # 1) ya gastado el 80% del presupuesto este mes
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              Threshold: 80
+              ThresholdType: PERCENTAGE
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, 'enol.igareta@okticket.es'}
+          # 2) la proyeccion de fin de mes supera el presupuesto (avisa antes)
+          - Notification:
+              NotificationType: FORECASTED
+              ComparisonOperator: GREATER_THAN
+              Threshold: 100
+              ThresholdType: PERCENTAGE
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, 'enol.igareta@okticket.es'}
+
     # sin AlarmActions: el canal de aviso (SNS/Slack) se decide con el equipo;
     # mientras tanto la alarma es visible en la consola de CloudWatch
     StaleDataAlarm:
